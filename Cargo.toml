@@ -1,0 +1,20 @@
+[package]
+name = "uci-beyond"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+optional_struct = "0.5"
+variants-data-struct = "0.3"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+kinded = { git = "https://github.com/JohnScience/kinded", rev = "b0aecf8" }
+enumset = "1.1"
+strum = { version = "0.27.2", features = ["derive", "strum_macros"] }
+
+[dev-dependencies]
+assert_matches = "1.5"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
