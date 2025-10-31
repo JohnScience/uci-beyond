@@ -11,6 +11,7 @@ async-trait = "0.1"
 kinded = { git = "https://github.com/JohnScience/kinded", rev = "b0aecf8" }
 enumset = "1.1"
 strum = { version = "0.27.2", features = ["derive", "strum_macros"] }
+thiserror = "2.0.17"
 
 [dev-dependencies]
 assert_matches = "1.5"

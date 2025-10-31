@@ -69,6 +69,8 @@ impl FromStr for IdCommand {
             .split_once(' ')
             .ok_or(command::parsing::Error::UnexpectedFormat)?;
 
+        let value = value.trim_end();
+
         match field {
             "name" => Ok(IdCommand::Name(value.to_string())),
             "author" => Ok(IdCommand::Author(value.to_string())),
