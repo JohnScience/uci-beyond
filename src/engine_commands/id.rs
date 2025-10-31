@@ -10,6 +10,8 @@ use crate::command;
 use crate::command::Command;
 use crate::util::{AsyncReadable, UciBufReadError};
 
+// TODO: reimplement parsing using better abstractions
+
 /// <https://backscattering.de/chess/uci/#engine-id>
 #[derive(VariantsDataStruct, Debug, Kinded)]
 #[variants_data_struct(
