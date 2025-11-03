@@ -21,7 +21,7 @@ impl<R: AsyncRead + Unpin + Send> UciBufReadExt for tokio::io::BufReader<R> {
 pub trait UciBufReadExtAsync: UciBufReadExt {
     async fn with_next_line<F, O, E>(&mut self, f: F) -> Result<Option<O>, UciBufReadError<E>>
     where
-        F: FnMut(&str) -> Result<Option<O>, UciBufReadError<E>> + Send + Unpin,
+        F: FnMut(&str) -> Result<O, UciBufReadError<E>> + Send + Unpin,
         Self: Sized,
     {
         let reader = self.buf_reader_mut();

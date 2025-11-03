@@ -97,7 +97,7 @@ impl AsyncReadable for IdCommand {
                 let cmd = line
                     .parse::<IdCommand>()
                     .map_err(|e| UciBufReadError::CustomError(e))?;
-                Ok(Some(cmd))
+                Ok(cmd)
             })
             .await?;
 

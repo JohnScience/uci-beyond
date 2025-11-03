@@ -182,7 +182,7 @@ impl AsyncReadable for OptionCommand {
                 let cmd = line
                     .parse::<OptionCommand>()
                     .map_err(UciBufReadError::CustomError)?;
-                Ok(Some(cmd))
+                Ok(cmd)
             })
             .await?;
 
