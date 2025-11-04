@@ -7,6 +7,7 @@ mod uci_lines_handler;
 
 pub use async_readable::AsyncReadable;
 pub use streaming_line_handler::StreamingLineHandler;
+pub use streaming_line_handler_ext::StreamingLineHandlerExt;
 pub use uci_buf_read_error::UciBufReadError;
 pub use uci_buf_read_ext::{UciBufReadExt, UciBufReadExtAsync};
-use uci_lines_handler::UciLinesHandler;
+pub use uci_lines_handler::UciLinesHandler;

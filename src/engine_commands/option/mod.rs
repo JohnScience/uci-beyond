@@ -168,33 +168,33 @@ impl FromStr for OptionCommand {
     }
 }
 
-#[async_trait]
-impl AsyncReadable for OptionCommand {
-    type Err = UciBufReadError<command::parsing::Error<OptionCommandParsingError>>;
-
-    async fn read_from<R: AsyncRead + Unpin + Send>(
-        reader: &mut tokio::io::BufReader<R>,
-    ) -> Result<Self, Self::Err> {
-        use crate::util::UciBufReadExtAsync;
-
-        let res: Option<OptionCommand> = reader
-            .with_next_line(|line| {
-                let cmd = line
-                    .parse::<OptionCommand>()
-                    .map_err(UciBufReadError::CustomError)?;
-                Ok(cmd)
-            })
-            .await?;
-
-        let Some(cmd) = res else {
-            return Err(UciBufReadError::CustomError(
-                command::parsing::Error::UnexpectedEof,
-            ));
-        };
-
-        Ok(cmd)
-    }
-}
+//#[async_trait]
+//impl AsyncReadable for OptionCommand {
+//    type Err = UciBufReadError<command::parsing::Error<OptionCommandParsingError>>;
+//
+//    async fn read_from<R: AsyncRead + Unpin + Send>(
+//        reader: &mut tokio::io::BufReader<R>,
+//    ) -> Result<Self, Self::Err> {
+//        use crate::util::UciBufReadExtAsync;
+//
+//        let res: Option<OptionCommand> = reader
+//            .with_next_line(|line| {
+//                let cmd = line
+//                    .parse::<OptionCommand>()
+//                    .map_err(UciBufReadError::CustomError)?;
+//                Ok(cmd)
+//            })
+//            .await?;
+//
+//        let Some(cmd) = res else {
+//            return Err(UciBufReadError::CustomError(
+//                command::parsing::Error::UnexpectedEof,
+//            ));
+//        };
+//
+//        Ok(cmd)
+//    }
+//}
 
 impl From<TypeClauseParsingError> for command::parsing::Error<OptionCommandParsingError> {
     fn from(e: TypeClauseParsingError) -> Self {

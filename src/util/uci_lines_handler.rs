@@ -133,7 +133,7 @@ where
         reader: &mut Self::Reader,
         line_len: usize,
         o: Self::FnOut,
-    ) -> Result<Self::Output, Self::FinalizeError> {
+    ) -> Result<<Self as StreamingLineHandler>::Output, Self::FinalizeError> {
         use tokio::io::AsyncBufReadExt as _;
 
         if o.is_ok() {

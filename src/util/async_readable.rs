@@ -1,11 +1,17 @@
 use async_trait::async_trait;
-use tokio::io::AsyncRead;
 
-#[async_trait]
-pub trait AsyncReadable: Sized {
-    type Err;
+use crate::util::streaming_line_handler_ext::StreamingLineHandlerExt;
 
-    async fn read_from<R: AsyncRead + Unpin + Send>(
-        reader: &mut tokio::io::BufReader<R>,
-    ) -> Result<Self, Self::Err>;
+#[async_trait(?Send)]
+pub trait AsyncReadable: Sized + Send {
+    type Err: Send;
+
+    async fn read_from<R>(reader: &mut R) -> Result<Self, R::HandlerError<Self::Err>>
+    where
+        R: StreamingLineHandlerExt<
+                // Require a line handler whose output is exactly `Self`
+                HandlerOutput<Self> = Self,
+                // And whose error type matches our own error type
+                HandlerError<Self::Err>: From<Self::Err>,
+            >;
 }

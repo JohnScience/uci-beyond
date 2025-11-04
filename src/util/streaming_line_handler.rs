@@ -1,4 +1,12 @@
-pub trait StreamingLineHandler: Unpin {
+pub trait StreamingLineHandler:
+    Unpin
+    + Future<
+        Output = Result<
+            Option<<Self as StreamingLineHandler>::Output>,
+            <Self as StreamingLineHandler>::Error,
+        >,
+    > + Send
+{
     type Error;
     type Output;
 
@@ -26,12 +34,12 @@ pub trait StreamingLineHandler: Unpin {
         reader: &mut Self::Reader,
         line_len: usize,
         o: Self::FnOut,
-    ) -> Result<Self::Output, Self::FinalizeError>;
+    ) -> Result<<Self as StreamingLineHandler>::Output, Self::FinalizeError>;
 
     fn handle(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Result<Option<Self::Output>, Self::Error>> {
+    ) -> core::task::Poll<Result<Option<<Self as StreamingLineHandler>::Output>, Self::Error>> {
         let this = self.get_mut();
         let (reader, f) = this.split_into_parts();
 
