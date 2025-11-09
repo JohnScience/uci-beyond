@@ -135,6 +135,58 @@ impl AsyncReadable for IdCommand {
     }
 }
 
+// #[async_trait(?Send)]
+// impl AsyncReadable for IdBlock {
+//     // Only the inner parsing error type
+//     type Err = command::parsing::Error<IdBlockParsingError>;
+
+//     async fn read_from<R>(reader: &mut R) -> Result<Self, R::HandlerError<Self::Err>>
+//     where
+//         R: StreamingLineHandlerExt<
+//                 HandlerOutput<Self> = Self,
+//                 HandlerError<Self::Err>: From<Self::Err>,
+//             >,
+//     {
+//         use crate::util::StreamingLineHandler as _;
+
+//         let mut opt_id_block = OptionalIdBlock::default();
+
+//         loop {
+//             let cmd = IdCommand::read_from(reader).await.map_err(
+//                 |e: <R as StreamingLineHandlerExt>::HandlerError<
+//                     <IdCommand as AsyncReadable>::Err,
+//                 >| {
+//                     let err: command::parsing::Error<IdCommandParsingError> = e.into();
+//                     err.map_custom(From::from)
+//                 },
+//             )?;
+
+//             match cmd {
+//                 IdCommand::Name(name) => {
+//                     if opt_id_block.name.is_some() {
+//                         return Err(IdBlockParsingError::RepeatedField(IdCommandKind::Name).into());
+//                     }
+//                     opt_id_block.name = Some(name);
+//                 }
+//                 IdCommand::Author(author) => {
+//                     if opt_id_block.author.is_some() {
+//                         return Err(
+//                             IdBlockParsingError::RepeatedField(IdCommandKind::Author).into()
+//                         );
+//                     }
+//                     opt_id_block.author = Some(author);
+//                 }
+//             }
+
+//             // When OptionalIdBlock becomes complete, convert it to IdBlock.
+//             opt_id_block = match opt_id_block.try_into() {
+//                 Ok(id_block) => return Ok(id_block),
+//                 Err(e) => e,
+//             };
+//         }
+//     }
+// }
+
 impl From<command::parsing::Error<IdCommandParsingError>>
     for UciBufReadError<command::parsing::Error<IdCommandParsingError>>
 {
@@ -155,47 +207,6 @@ impl From<IdCommandParsingError> for IdBlockParsingError {
     }
 }
 
-//#[async_trait]
-//impl AsyncReadable for IdBlock {
-//    type Err = UciBufReadError<command::parsing::Error<IdBlockParsingError>>;
-//
-//    async fn read_from<R: AsyncRead + Unpin + Send>(
-//        reader: &mut tokio::io::BufReader<R>,
-//    ) -> Result<Self, Self::Err> {
-//        let mut opt_id_block = OptionalIdBlock::default();
-//
-//        loop {
-//            let cmd = IdCommand::read_from(reader)
-//                .await
-//                .map_err(|e| e.map_parsing_custom(From::from))?;
-//
-//            match cmd {
-//                IdCommand::Name(name) => {
-//                    if opt_id_block.name.is_some() {
-//                        return Err(UciBufReadError::from_parsing_custom(
-//                            IdBlockParsingError::RepeatedField(IdCommandKind::Name),
-//                        ));
-//                    }
-//                    opt_id_block.name = Some(name);
-//                }
-//                IdCommand::Author(author) => {
-//                    if opt_id_block.author.is_some() {
-//                        return Err(UciBufReadError::from_parsing_custom(
-//                            IdBlockParsingError::RepeatedField(IdCommandKind::Author),
-//                        ));
-//                    }
-//                    opt_id_block.author = Some(author);
-//                }
-//            }
-//
-//            opt_id_block = match opt_id_block.try_into() {
-//                Ok(id_block) => return Ok(id_block),
-//                Err(e) => e,
-//            };
-//        }
-//    }
-//}
-//
 #[cfg(test)]
 mod tests {
     use super::*;

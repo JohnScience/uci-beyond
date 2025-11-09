@@ -1,6 +1,6 @@
-use crate::util::{StreamingLineHandler, UciBufReadError, UciLinesHandler};
+use crate::util::{StreamingLineHandler, StreamingLineReader, UciBufReadError, UciLinesHandler};
 
-pub trait StreamingLineHandlerExt {
+pub trait StreamingLineHandlerExt: StreamingLineReader {
     /// The error type the handler will use (publicly exposed).
     type HandlerError<E>: Send
     where
