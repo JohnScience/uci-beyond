@@ -8,7 +8,7 @@ pub trait Command {
         }
 
         let Some(without_name) = s.strip_prefix(Self::NAME) else {
-            return Err(parsing::Error::UnexpectedCommand);
+            return Err(parsing::Error::UnexpectedCommand(s.to_string()));
         };
 
         let Some(without_space) = without_name.strip_prefix(' ') else {
@@ -27,7 +27,7 @@ pub mod parsing {
         #[error("Unexpected end of tokens")]
         UnexpectedEndOfTokens,
         #[error("Unexpected command")]
-        UnexpectedCommand,
+        UnexpectedCommand(String),
         #[error("Unexpected format")]
         UnexpectedFormat,
         #[error("Custom parsing error: {0}")]
@@ -42,7 +42,7 @@ pub mod parsing {
             match self {
                 Error::UnexpectedEof => Error::UnexpectedEof,
                 Error::UnexpectedEndOfTokens => Error::UnexpectedEndOfTokens,
-                Error::UnexpectedCommand => Error::UnexpectedCommand,
+                Error::UnexpectedCommand(cmd) => Error::UnexpectedCommand(cmd),
                 Error::UnexpectedFormat => Error::UnexpectedFormat,
                 Error::CustomError(e) => Error::CustomError(f(e)),
             }
