@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::{gui_commands::UciCommandTrait, util::AsyncReadable};
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait Connection {
     type Err: std::fmt::Debug + Send;
 
