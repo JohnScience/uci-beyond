@@ -35,6 +35,7 @@ pub enum UciOptionFromPartsError {
     name=UciOptionBlock,
     attrs(
         #[optional_struct(UciOptionBlockBuilder)]
+        #[derive(Debug)]
     ),
     variants_tys_attrs(
         #[derive(Debug, PartialEq, Eq, Clone)]

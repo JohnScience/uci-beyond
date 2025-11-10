@@ -9,6 +9,7 @@ use crate::{
     util::{AsyncReadable, handle_next_line},
 };
 
+#[derive(Debug)]
 pub struct UciCommandResponse {
     pub id_block: IdBlock,
     pub option_block: UciOptionBlock,

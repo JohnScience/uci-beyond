@@ -7,6 +7,7 @@ use crate::{
     util::{AsyncReadable, StreamingLineReader, handle_next_line},
 };
 
+#[derive(Debug)]
 pub struct UciOkCommand;
 
 impl Display for UciOkCommand {
