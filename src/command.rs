@@ -20,12 +20,17 @@ pub trait Command {
 }
 
 pub mod parsing {
-    #[derive(Debug)]
+    #[derive(thiserror::Error, Debug)]
     pub enum Error<E> {
+        #[error("Unexpected end of file")]
         UnexpectedEof,
+        #[error("Unexpected end of tokens")]
         UnexpectedEndOfTokens,
+        #[error("Unexpected command")]
         UnexpectedCommand,
+        #[error("Unexpected format")]
         UnexpectedFormat,
+        #[error("Custom parsing error: {0}")]
         CustomError(E),
     }
 
@@ -42,19 +47,15 @@ pub mod parsing {
                 Error::CustomError(e) => Error::CustomError(f(e)),
             }
         }
+
+        pub fn wrap<O, RR>(self) -> Result<Option<Result<O, Self>>, RR> {
+            Ok(Some(Err(self)))
+        }
     }
 
     impl<E> From<E> for Error<E> {
         fn from(e: E) -> Self {
             Error::CustomError(e)
         }
-    }
-
-    // We define a new type so that we can implement custom parsing logic.
-    // Both std::result::Result and std::str::FromStr are external, so we cannot implement
-    // FromStr for Result<IdCommand, Error> directly.
-    pub enum Result<T, E> {
-        Ok(T),
-        Err(Error<E>),
     }
 }

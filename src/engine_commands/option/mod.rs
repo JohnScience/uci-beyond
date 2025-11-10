@@ -1,9 +1,6 @@
 use std::str::FromStr;
 
-use crate::{
-    command, options,
-    util::{AsyncReadable, UciBufReadError},
-};
+use crate::{command, options, util::AsyncReadable};
 
 mod type_clause;
 mod uci_option_block;

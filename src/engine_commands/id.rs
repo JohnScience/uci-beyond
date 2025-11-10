@@ -3,12 +3,11 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use kinded::Kinded;
 use optional_struct::optional_struct;
-use tokio::io::AsyncRead;
 use variants_data_struct::VariantsDataStruct;
 
 use crate::command;
 use crate::command::Command;
-use crate::util::{AsyncReadable, StreamingLineHandlerExt, UciBufReadError};
+use crate::util::{AsyncReadable, StreamingLineReader, handle_next_line};
 
 // TODO: reimplement parsing using better abstractions
 
@@ -34,16 +33,26 @@ pub enum IdCommand {
     Author(String),
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum IdCommandParsingError {
+    #[error("Wrong field: `{0}`.")]
     WrongField(String),
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum IdBlockParsingError {
-    CommandError(command::parsing::Error<IdCommandParsingError>),
+    #[error("Command error: {0:?}")]
+    CommandError(#[from] command::parsing::Error<IdCommandParsingError>),
+    #[error("Repeated field: {0}")]
     RepeatedField(IdCommandKind),
+    #[error("Incomplete IdBlock")]
     IncompleteBlock,
+}
+
+impl IdBlockParsingError {
+    pub fn wrap<RR>(self) -> Result<Option<Result<IdBlock, command::parsing::Error<Self>>>, RR> {
+        command::parsing::Error::from(self).wrap()
+    }
 }
 
 impl command::Command for IdCommand {
@@ -87,117 +96,76 @@ impl FromStr for IdCommand {
 impl AsyncReadable for IdCommand {
     // Only the inner parsing error type
     type Err = command::parsing::Error<IdCommandParsingError>;
-
-    async fn read_from<R>(reader: &mut R) -> Result<Self, R::HandlerError<Self::Err>>
+    async fn read_from<R>(reader: &mut R) -> Result<Option<Result<Self, Self::Err>>, R::Error>
     where
-        R: StreamingLineHandlerExt<
-                HandlerOutput<Self> = Self,
-                HandlerError<Self::Err>: From<Self::Err>,
-            >,
+        R: StreamingLineReader,
     {
-        use crate::util::StreamingLineHandler as _;
-
-        let f = |line: &str| -> Result<IdCommand, <R as StreamingLineHandlerExt>::HandlerError<Self::Err>> {
-            line.parse::<IdCommand>().map_err(From::from)
+        let f = |line: &str| -> Result<IdCommand, <IdCommand as FromStr>::Err> {
+            line.parse::<IdCommand>()
         };
 
-        let result: Option<IdCommand> = {
-            let mut handler: <R as StreamingLineHandlerExt>::LineHandler<
-                '_,
-                for<'a> fn(
-                    &'a str,
-                ) -> Result<
-                    IdCommand,
-                    <R as StreamingLineHandlerExt>::HandlerError<Self::Err>,
-                >,
-                IdCommand,
-                Self::Err,
-            > = reader.make_line_handler(f);
+        let result: Option<Result<IdCommand, <IdCommand as FromStr>::Err>> =
+            handle_next_line(reader, f).await?;
 
-            // Convert the handler error (`UciBufReadError<E>`) into our `Self::Err` (`E`)
-            let res: Result<
-                Option<IdCommand>,
-                <R as StreamingLineHandlerExt>::HandlerError<Self::Err>,
-            > = std::future::poll_fn(|cx| {
-                let mut handler = std::pin::Pin::new(&mut handler);
-                handler.as_mut().handle(cx)
-            })
-            .await;
-
-            res?
-        };
-
-        let Some(command) = result else {
-            return Err(command::parsing::Error::UnexpectedEof.into());
-        };
-
-        Ok(command)
+        Ok(result)
     }
 }
 
-// #[async_trait(?Send)]
-// impl AsyncReadable for IdBlock {
-//     // Only the inner parsing error type
-//     type Err = command::parsing::Error<IdBlockParsingError>;
+#[async_trait(?Send)]
+impl AsyncReadable for IdBlock {
+    // Only the inner parsing error type
+    type Err = command::parsing::Error<IdBlockParsingError>;
 
-//     async fn read_from<R>(reader: &mut R) -> Result<Self, R::HandlerError<Self::Err>>
-//     where
-//         R: StreamingLineHandlerExt<
-//                 HandlerOutput<Self> = Self,
-//                 HandlerError<Self::Err>: From<Self::Err>,
-//             >,
-//     {
-//         use crate::util::StreamingLineHandler as _;
+    async fn read_from<R>(reader: &mut R) -> Result<Option<Result<Self, Self::Err>>, R::Error>
+    where
+        R: StreamingLineReader,
+    {
+        let mut opt_id_block = OptionalIdBlock::default();
+        let mut i = 0;
 
-//         let mut opt_id_block = OptionalIdBlock::default();
+        loop {
+            let cmd: Option<Result<IdCommand, <IdCommand as FromStr>::Err>> =
+                IdCommand::read_from(reader).await?;
 
-//         loop {
-//             let cmd = IdCommand::read_from(reader).await.map_err(
-//                 |e: <R as StreamingLineHandlerExt>::HandlerError<
-//                     <IdCommand as AsyncReadable>::Err,
-//                 >| {
-//                     let err: command::parsing::Error<IdCommandParsingError> = e.into();
-//                     err.map_custom(From::from)
-//                 },
-//             )?;
+            let Some(cmd) = cmd else {
+                if i == 0 {
+                    // No IdCommands were read; return None
+                    return Ok(None);
+                }
+                // EOF reached before completing the block
+                return IdBlockParsingError::IncompleteBlock.wrap();
+            };
 
-//             match cmd {
-//                 IdCommand::Name(name) => {
-//                     if opt_id_block.name.is_some() {
-//                         return Err(IdBlockParsingError::RepeatedField(IdCommandKind::Name).into());
-//                     }
-//                     opt_id_block.name = Some(name);
-//                 }
-//                 IdCommand::Author(author) => {
-//                     if opt_id_block.author.is_some() {
-//                         return Err(
-//                             IdBlockParsingError::RepeatedField(IdCommandKind::Author).into()
-//                         );
-//                     }
-//                     opt_id_block.author = Some(author);
-//                 }
-//             }
+            let cmd = match cmd {
+                Ok(cmd) => cmd,
+                Err(e) => {
+                    return IdBlockParsingError::from(e).wrap();
+                }
+            };
 
-//             // When OptionalIdBlock becomes complete, convert it to IdBlock.
-//             opt_id_block = match opt_id_block.try_into() {
-//                 Ok(id_block) => return Ok(id_block),
-//                 Err(e) => e,
-//             };
-//         }
-//     }
-// }
+            match cmd {
+                IdCommand::Name(name) => {
+                    if opt_id_block.name.is_some() {
+                        return IdBlockParsingError::RepeatedField(IdCommandKind::Name).wrap();
+                    }
+                    opt_id_block.name = Some(name);
+                }
+                IdCommand::Author(author) => {
+                    if opt_id_block.author.is_some() {
+                        return IdBlockParsingError::RepeatedField(IdCommandKind::Author).wrap();
+                    }
+                    opt_id_block.author = Some(author);
+                }
+            }
 
-impl From<command::parsing::Error<IdCommandParsingError>>
-    for UciBufReadError<command::parsing::Error<IdCommandParsingError>>
-{
-    fn from(err: command::parsing::Error<IdCommandParsingError>) -> Self {
-        UciBufReadError::CustomError(err)
-    }
-}
+            // When OptionalIdBlock becomes complete, convert it to IdBlock.
+            opt_id_block = match opt_id_block.try_into() {
+                Ok(id_block) => return Ok(Some(Ok(id_block))),
+                Err(e) => e,
+            };
 
-impl From<command::parsing::Error<IdCommandParsingError>> for IdBlockParsingError {
-    fn from(err: command::parsing::Error<IdCommandParsingError>) -> Self {
-        IdBlockParsingError::CommandError(err)
+            i += 1;
+        }
     }
 }
 
@@ -233,8 +201,16 @@ mod tests {
 
         let mut reader = tokio::io::BufReader::new(id_block_str.as_bytes());
 
-        let parsed_id_name = IdCommand::read_from(&mut reader).await.unwrap();
-        let parsed_id_author = IdCommand::read_from(&mut reader).await.unwrap();
+        let parsed_id_name = IdCommand::read_from(&mut reader)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let parsed_id_author = IdCommand::read_from(&mut reader)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
 
         assert_matches!(
             parsed_id_name,
@@ -246,23 +222,27 @@ mod tests {
         );
     }
 
-    //    #[tokio::test]
-    //    async fn test_parse_stockfish_output_imitation_as_id_block() {
-    //        use assert_matches::assert_matches;
-    //
-    //        let id_block_str: &str = "id name Stockfish 17.1\n\
-    //            id author the Stockfish developers (see AUTHORS file)\n";
-    //
-    //        let mut reader = tokio::io::BufReader::new(id_block_str.as_bytes());
-    //
-    //        let parsed_id_block = IdBlock::read_from(&mut reader).await.unwrap();
-    //
-    //        assert_matches!(
-    //            parsed_id_block,
-    //            IdBlock {
-    //                name,
-    //                author,
-    //            } if name == "Stockfish 17.1" && author == "the Stockfish developers (see AUTHORS file)"
-    //        );
-    //    }
+    #[tokio::test]
+    async fn test_parse_stockfish_output_imitation_as_id_block() {
+        use assert_matches::assert_matches;
+
+        let id_block_str: &str = "id name Stockfish 17.1\n\
+               id author the Stockfish developers (see AUTHORS file)\n";
+
+        let mut reader = tokio::io::BufReader::new(id_block_str.as_bytes());
+
+        let parsed_id_block = IdBlock::read_from(&mut reader)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        assert_matches!(
+            parsed_id_block,
+            IdBlock {
+                name,
+                author,
+            } if name == "Stockfish 17.1" && author == "the Stockfish developers (see AUTHORS file)"
+        );
+    }
 }

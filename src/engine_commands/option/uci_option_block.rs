@@ -5,7 +5,7 @@ use crate::{
     command,
     engine_commands::{self, OptionCommand},
     options::UciOption,
-    util::{AsyncReadable, UciBufReadError},
+    util::AsyncReadable,
 };
 
 // UciOptionBlock is defined there because the UciOption enum is in the options module
