@@ -32,7 +32,7 @@ pub use ucinewgame::UciNewGameCommand;
 use crate::util::AsyncReadable;
 
 /// The trait that all GUI UCI commands implement.
-pub trait UciCommandTrait: Display {
+pub trait UciCommandTrait: Display + Send {
     type Response: AsyncReadable;
 }
 
