@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::gui_commands::UciCommandTrait;
+use crate::{gui_command_responses::UciCommandResponse, gui_commands::UciCommandTrait};
 
 /// Tell the engine to use the UCI (universal chess interface).
 /// This will be sent once, by a GUI, as a first command after the program boots to tell the engine to switch to UCI mode.
@@ -19,5 +19,5 @@ impl Display for UciCommand {
 
 impl UciCommandTrait for UciCommand {
     // TODO: Define a proper response type
-    type Response = ();
+    type Response = UciCommandResponse;
 }

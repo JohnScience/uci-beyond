@@ -1,6 +1,9 @@
 use core::task::{Context, Poll};
 
+mod string_stream_reader;
 mod tokio_io_bufreader_impl;
+
+pub use string_stream_reader::StringStreamReader;
 
 pub trait StreamingLineReader: Unpin + Send {
     /// The type of error that can occur while reading a line.

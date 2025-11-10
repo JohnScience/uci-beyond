@@ -29,9 +29,11 @@ pub use stop::StopCommand;
 pub use uci::UciCommand;
 pub use ucinewgame::UciNewGameCommand;
 
+use crate::util::AsyncReadable;
+
 /// The trait that all GUI UCI commands implement.
 pub trait UciCommandTrait: Display {
-    type Response;
+    type Response: AsyncReadable;
 }
 
 // TODO: consider adding non-standard commands (e.g. for Stockfish)
