@@ -1,12 +1,14 @@
 use std::str::FromStr;
 
-use crate::{command, options, util::AsyncReadable};
+use crate::{
+    command, options,
+    util::{AsyncReadable, StreamingLineReader, handle_next_line},
+};
 
 mod type_clause;
 mod uci_option_block;
 
 use async_trait::async_trait;
-use tokio::io::AsyncRead;
 pub use type_clause::{TypeClause, TypeClauseParsingError};
 pub use uci_option_block::UciOptionBlock;
 
@@ -165,33 +167,24 @@ impl FromStr for OptionCommand {
     }
 }
 
-//#[async_trait]
-//impl AsyncReadable for OptionCommand {
-//    type Err = UciBufReadError<command::parsing::Error<OptionCommandParsingError>>;
-//
-//    async fn read_from<R: AsyncRead + Unpin + Send>(
-//        reader: &mut tokio::io::BufReader<R>,
-//    ) -> Result<Self, Self::Err> {
-//        use crate::util::UciBufReadExtAsync;
-//
-//        let res: Option<OptionCommand> = reader
-//            .with_next_line(|line| {
-//                let cmd = line
-//                    .parse::<OptionCommand>()
-//                    .map_err(UciBufReadError::CustomError)?;
-//                Ok(cmd)
-//            })
-//            .await?;
-//
-//        let Some(cmd) = res else {
-//            return Err(UciBufReadError::CustomError(
-//                command::parsing::Error::UnexpectedEof,
-//            ));
-//        };
-//
-//        Ok(cmd)
-//    }
-//}
+#[async_trait(?Send)]
+impl AsyncReadable for OptionCommand {
+    type Err = command::parsing::Error<OptionCommandParsingError>;
+
+    async fn read_from<R>(reader: &mut R) -> Result<Option<Result<Self, Self::Err>>, R::Error>
+    where
+        R: StreamingLineReader,
+    {
+        let f = |line: &str| -> Result<OptionCommand, <OptionCommand as FromStr>::Err> {
+            line.parse::<OptionCommand>()
+        };
+
+        let res: Option<Result<OptionCommand, <OptionCommand as FromStr>::Err>> =
+            handle_next_line(reader, f).await?;
+
+        Ok(res)
+    }
+}
 
 impl From<TypeClauseParsingError> for command::parsing::Error<OptionCommandParsingError> {
     fn from(e: TypeClauseParsingError) -> Self {
@@ -382,5 +375,129 @@ option name EvalFileSmall type string default nn-37f18f62d772.nnue
 
             assert_eq!(uci_option, reparsed_uci_option);
         }
+    }
+
+    #[tokio::test]
+    async fn test_parse_option_commands_async() {
+        use tokio::io::BufReader;
+
+        let input = b"option name Debug Log File type string default <empty>\n\
+        option name NumaPolicy type string default auto\n\
+        option name Threads type spin default 1 min 1 max 1024\n\
+        option name Hash type spin default 16 min 1 max 33554432\n\
+        option name Clear Hash type button\n\
+        option name Ponder type check default false\n\
+        option name MultiPV type spin default 1 min 1 max 256\n\
+        option name Skill Level type spin default 20 min 0 max 20\n\
+        option name Move Overhead type spin default 10 min 0 max 5000\n\
+        option name nodestime type spin default 0 min 0 max 10000\n\
+        option name UCI_Chess960 type check default false\n\
+        option name UCI_LimitStrength type check default false\n\
+        option name UCI_Elo type spin default 1320 min 1320 max 3190\n\
+        option name UCI_ShowWDL type check default false\n\
+        option name SyzygyPath type string default <empty>\n\
+        option name SyzygyProbeDepth type spin default 1 min 1 max 100\n\
+        option name Syzygy50MoveRule type check default true\n\
+        option name SyzygyProbeLimit type spin default 7 min 0 max 7\n\
+        option name EvalFile type string default nn-1c0000000000.nnue\n\
+        option name EvalFileSmall type string default nn-37f18f62d772.nnue\n";
+
+        let cursor = std::io::Cursor::new(input);
+        let mut reader = BufReader::new(cursor);
+
+        let expected = vec![
+            UciOption::DebugLogFile {
+                default: model::UciString::default(),
+            },
+            UciOption::NumaPolicy {
+                default: model::NumaPolicy::Auto,
+            },
+            UciOption::Threads(options::Spin {
+                default: 1,
+                min: 1,
+                max: 1024,
+            }),
+            UciOption::Hash(options::Spin {
+                default: 16,
+                min: 1,
+                max: 33_554_432,
+            }),
+            UciOption::ClearHash,
+            UciOption::Ponder {
+                default: model::Check(false),
+            },
+            UciOption::MultiPV(options::Spin {
+                default: 1,
+                min: 1,
+                max: 256,
+            }),
+            UciOption::SkillLevel(options::Spin {
+                default: 20,
+                min: 0,
+                max: 20,
+            }),
+            UciOption::MoveOverhead(options::Spin {
+                default: 10,
+                min: 0,
+                max: 5000,
+            }),
+            UciOption::Nodestime(options::Spin {
+                default: 0,
+                min: 0,
+                max: 10_000,
+            }),
+            UciOption::UCIChess960 {
+                default: model::Check(false),
+            },
+            UciOption::UCILimitStrength {
+                default: model::Check(false),
+            },
+            UciOption::UCIElo(options::Spin {
+                default: 1320,
+                min: 1320,
+                max: 3190,
+            }),
+            UciOption::UCIShowWDL {
+                default: model::Check(false),
+            },
+            UciOption::SyzygyPath {
+                default: model::UciString::default(),
+            },
+            UciOption::SyzygyProbeDepth(options::Spin {
+                default: 1,
+                min: 1,
+                max: 100,
+            }),
+            UciOption::Syzygy50MoveRule {
+                default: model::Check(true),
+            },
+            UciOption::SyzygyProbeLimit(options::Spin {
+                default: 7,
+                min: 0,
+                max: 7,
+            }),
+            UciOption::EvalFile {
+                default: model::UciString("nn-1c0000000000.nnue".to_string()),
+            },
+            UciOption::EvalFileSmall {
+                default: model::UciString("nn-37f18f62d772.nnue".to_string()),
+            },
+        ];
+
+        for expected_option in expected {
+            let res = OptionCommand::read_from(&mut reader).await;
+
+            match res {
+                Ok(Some(Ok(option_cmd))) => {
+                    assert_eq!(option_cmd.0, expected_option);
+                }
+                Ok(None) => break,
+                Ok(Some(Err(e))) => panic!("Failed to parse OptionCommand: {e:?}"),
+                Err(e) => panic!("I/O error: {e}"),
+            }
+        }
+
+        let res = OptionCommand::read_from(&mut reader).await;
+        assert!(matches!(res, Ok(None)));
     }
 }
