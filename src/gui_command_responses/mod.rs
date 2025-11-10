@@ -10,9 +10,9 @@ use crate::{
 };
 
 pub struct UciCommandResponse {
-    id_block: IdBlock,
-    option_block: UciOptionBlock,
-    uciok: UciOkCommand,
+    pub id_block: IdBlock,
+    pub option_block: UciOptionBlock,
+    pub uciok: UciOkCommand,
 }
 
 #[derive(Debug, thiserror::Error)]
