@@ -11,5 +11,6 @@ pub trait Connection {
         cmd: C,
     ) -> Result<Result<C::Response, <C::Response as AsyncReadable>::Err>, Self::Err>
     where
-        C: UciCommandTrait;
+        C: UciCommandTrait,
+        C::Response: AsyncReadable;
 }

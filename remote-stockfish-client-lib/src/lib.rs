@@ -39,6 +39,7 @@ impl uci_beyond::util::Connection for RemoteChessEngineConnection {
     ) -> Result<Result<C::Response, <C::Response as AsyncReadable>::Err>, Self::Err>
     where
         C: UciCommandTrait,
+        C::Response: AsyncReadable,
     {
         use futures_util::SinkExt as _;
 
@@ -183,6 +184,36 @@ mod tests {
         let res = connection.send(UciCommand).await??;
 
         println!("Response to UCI command: {res:?}");
+
+        connection.close_gracefully().await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_best_by_test() -> anyhow::Result<()> {
+        use uci_beyond::gui_commands::{GoCommand, UciCommand};
+        use uci_beyond::util::Connection as _;
+
+        let engine = RemoteChessEngine::new("ws://127.0.0.1:8080");
+        let mut connection = engine.connect().await?;
+
+        connection.skip_message().await?;
+
+        let res = connection.send(UciCommand).await??;
+
+        println!("Response to UCI command: {res:?}");
+
+        let go_cmd = GoCommand {
+            depth: Some(5),
+            ..Default::default()
+        };
+
+        let _res = connection.send(go_cmd).await??;
+
+        let msg = connection.next_message().await?;
+
+        println!("Msg: {msg}");
 
         connection.close_gracefully().await?;
 
