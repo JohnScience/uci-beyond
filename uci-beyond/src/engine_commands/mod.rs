@@ -9,5 +9,6 @@ pub use info::{
 };
 pub use option::{
     OptionBlockParsingError, OptionCommand, OptionCommandParsingError, UciOptionBlock,
+    UciOptionBlockBuilder,
 };
 pub use uciok::{UciOkCommand, UciOkCommandParsingError};

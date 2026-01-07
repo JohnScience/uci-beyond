@@ -10,7 +10,7 @@ mod uci_option_block;
 
 use async_trait::async_trait;
 pub use type_clause::{TypeClause, TypeClauseParsingError};
-pub use uci_option_block::{OptionBlockParsingError, UciOptionBlock};
+pub use uci_option_block::{OptionBlockParsingError, UciOptionBlock, UciOptionBlockBuilder};
 
 /// <https://backscattering.de/chess/uci/#engine-option>
 ///

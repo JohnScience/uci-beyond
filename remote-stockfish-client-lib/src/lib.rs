@@ -78,10 +78,10 @@ impl uci_beyond::util::Connection for RemoteChessEngineConnection {
         let read = read.flat_map(|msg| {
             match msg {
                 Ok(tungstenite::Message::Text(text)) => {
-                    eprintln!("=== WebSocket Text Message Received ===");
-                    eprintln!("Length: {} bytes", text.len());
-                    eprintln!("Content: {:?}", text);
-                    eprintln!("======================================");
+                    // eprintln!("=== WebSocket Text Message Received ===");
+                    // eprintln!("Length: {} bytes", text.len());
+                    // eprintln!("Content: {:?}", text);
+                    // eprintln!("======================================");
 
                     // Split text by newlines to handle multiple UCI lines in one WebSocket message
                     // This handles both \n (Linux) and \r\n (Windows) line endings
@@ -101,11 +101,11 @@ impl uci_beyond::util::Connection for RemoteChessEngineConnection {
                     // UCI commands we send: uci, isready, position, go, stop, quit, setoption, ucinewgame
                     lines.retain(|line| {
                         let trimmed = line.trim();
-                        eprintln!("DEBUG: Checking line: {:?} (trimmed: {:?})", line, trimmed);
+                        // eprintln!("DEBUG: Checking line: {:?} (trimmed: {:?})", line, trimmed);
                         // Skip empty lines that would be command echoes or actual UCI commands
                         // Valid UCI responses start with: id, option, uciok, readyok, bestmove, info
                         if trimmed.is_empty() {
-                            eprintln!("DEBUG: Keeping empty line");
+                            // eprintln!("DEBUG: Keeping empty line");
                             true // Keep empty lines (they're structural in UCI protocol)
                         } else if trimmed == "uci"
                             || trimmed == "isready"
@@ -116,10 +116,10 @@ impl uci_beyond::util::Connection for RemoteChessEngineConnection {
                             || trimmed.starts_with("go ")
                             || trimmed.starts_with("setoption ")
                         {
-                            eprintln!("Filtering out command echo: {:?}", trimmed);
+                            // eprintln!("Filtering out command echo: {:?}", trimmed);
                             false // Filter out command echoes
                         } else {
-                            eprintln!("DEBUG: Keeping response line");
+                            // eprintln!("DEBUG: Keeping response line");
                             true // Keep actual UCI responses
                         }
                     });
@@ -141,12 +141,12 @@ impl uci_beyond::util::Connection for RemoteChessEngineConnection {
             }
         });
 
-        eprintln!("=== Starting to parse response ===");
+        // eprintln!("=== Starting to parse response ===");
         let mut reader = StringStreamReader::new(read);
         let response = C::Response::read_from(&mut reader)
             .await?
             .context("A command expected")?;
-        eprintln!("=== Finished parsing response ===");
+        // eprintln!("=== Finished parsing response ===");
 
         match response {
             Ok(resp) => return Ok(Ok(resp)),
@@ -410,7 +410,7 @@ mod tests {
         use uci_beyond::gui_commands::{GoCommand, UciCommand};
         use uci_beyond::util::Connection as _;
 
-        let engine = RemoteChessEngine::new("ws://127.0.0.1:8080");
+        let engine = RemoteChessEngine::new("ws://127.0.0.1:9002");
         let mut connection = engine.connect().await?;
 
         connection.skip_message().await?;
@@ -437,7 +437,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_evaluate_position() -> anyhow::Result<()> {
-        let engine = RemoteChessEngine::new("ws://127.0.0.1:8080");
+        let engine = RemoteChessEngine::new("ws://127.0.0.1:9002");
         let mut connection = engine.connect().await?;
         connection.skip_message().await?;
         let fen = uci_beyond::model::FenString("6k1/5ppp/8/8/8/6Q1/5PPP/6K1 w - - 0 1".to_string());

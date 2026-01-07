@@ -13,19 +13,20 @@ pub use crate::options::{UciOptionBlock, UciOptionBlockBuilder};
 #[derive(Debug)]
 pub enum OptionBlockParsingError {
     CommandErrorParsingError(engine_commands::OptionCommandParsingError),
-    IncompleteBlock,
     EmptyLineWasNotFoundUntilEndOfStream,
     RepeatedOption,
 }
 
 impl OptionBlockParsingError {
-    fn wrap<RR>(self) -> Result<Option<Result<UciOptionBlock, command::parsing::Error<Self>>>, RR> {
+    fn wrap<RR>(
+        self,
+    ) -> Result<Option<Result<UciOptionBlockBuilder, command::parsing::Error<Self>>>, RR> {
         command::parsing::Error::from(self).wrap()
     }
 }
 
 #[async_trait(?Send)]
-impl AsyncReadable for UciOptionBlock {
+impl AsyncReadable for UciOptionBlockBuilder {
     type Err = command::parsing::Error<OptionBlockParsingError>;
 
     async fn read_from<R>(reader: &mut R) -> Result<Option<Result<Self, Self::Err>>, R::Error>
@@ -37,7 +38,7 @@ impl AsyncReadable for UciOptionBlock {
 
         loop {
             let opt = handle_next_line(reader, |line: &str| {
-                if line.trim().is_empty() {
+                if !line.trim_start().starts_with("option") {
                     return LineHandlerOutcome::Peeked;
                 }
                 match line.parse::<OptionCommand>() {
@@ -57,11 +58,8 @@ impl AsyncReadable for UciOptionBlock {
                         // No OptionCommands were read; return None
                         return Ok(None);
                     } else {
-                        // End of OptionBlock
-                        match b.try_into() {
-                            Ok(id_block) => return Ok(Some(Ok(id_block))),
-                            Err(_b) => return OptionBlockParsingError::IncompleteBlock.wrap(),
-                        };
+                        // End of OptionBlock - return the builder with whatever options were found
+                        return Ok(Some(Ok(b)));
                     }
                 }
                 LineHandlerOutcome::Read(cmd) => cmd,
@@ -250,11 +248,14 @@ mod tests {
            \n";
 
         let mut reader = tokio::io::BufReader::new(input.as_bytes());
-        let uci_option_block = UciOptionBlock::read_from(&mut reader)
+        let uci_option_block_builder = UciOptionBlockBuilder::read_from(&mut reader)
             .await
             .unwrap()
             .unwrap()
             .unwrap();
+
+        // Convert the builder to a full block - this test has all options so it should succeed
+        let uci_option_block: UciOptionBlock = uci_option_block_builder.try_into().unwrap();
 
         assert_eq!(
             uci_option_block.debug_log_file,

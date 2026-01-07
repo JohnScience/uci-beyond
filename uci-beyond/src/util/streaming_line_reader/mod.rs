@@ -48,7 +48,7 @@ where
     use core::future::poll_fn;
 
     poll_fn(|cx| {
-        let (poll, len) = match reader.next_line(cx) {
+        let (poll, len, should_consume) = match reader.next_line(cx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             Poll::Ready(Ok(Some(line))) => {
@@ -57,13 +57,16 @@ where
 
                 let o = f(line_str);
 
-                (Poll::Ready(Ok(Some(o))), len)
+                // Only consume if we actually read the line (not if we peeked)
+                let should_consume = !matches!(o, LineHandlerOutcome::Peeked);
+
+                (Poll::Ready(Ok(Some(o))), len, should_consume)
             }
             Poll::Ready(Ok(None)) => return Poll::Ready(Ok(None)),
         };
 
-        // If not auto-consuming, consume manually
-        if !R::AUTO_CONSUMING {
+        // If not auto-consuming, consume manually based on whether it was peeked
+        if !R::AUTO_CONSUMING && should_consume {
             reader.consume_line_manually(len);
         }
 

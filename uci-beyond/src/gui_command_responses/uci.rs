@@ -4,7 +4,7 @@ use crate::{
     command,
     engine_commands::{
         IdBlock, IdBlockParsingError, OptionBlockParsingError, UciOkCommand,
-        UciOkCommandParsingError, UciOptionBlock,
+        UciOkCommandParsingError, UciOptionBlockBuilder,
     },
     util::{AsyncReadable, LineHandlerOutcome, handle_next_line},
 };
@@ -12,7 +12,7 @@ use crate::{
 #[derive(Debug)]
 pub struct UciCommandResponse {
     pub id_block: IdBlock,
-    pub option_block: UciOptionBlock,
+    pub option_block: UciOptionBlockBuilder,
     pub uciok: UciOkCommand,
 }
 
@@ -85,8 +85,8 @@ impl AsyncReadable for UciCommandResponse {
             }
         };
 
-        let option_block = match UciOptionBlock::read_from(reader).await? {
-            Some(Ok(block)) => block,
+        let option_block_builder = match UciOptionBlockBuilder::read_from(reader).await? {
+            Some(Ok(builder)) => builder,
             Some(Err(e)) => {
                 return e
                     .map_custom(UciCommandResponseParsingError::OptionBlockParsingError)
@@ -96,6 +96,9 @@ impl AsyncReadable for UciCommandResponse {
                 return UciCommandResponseParsingError::IncompleteResponse.wrap();
             }
         };
+
+        // Since all UCI options are optional, we just use the builder directly
+        let option_block = option_block_builder;
 
         let uciok = match UciOkCommand::read_from(reader).await? {
             Some(Ok(cmd)) => cmd,
@@ -165,116 +168,116 @@ uciok\n";
         );
         assert_eq!(
             uci_command_response.option_block.debug_log_file,
-            model::UciString(String::new())
+            Some(model::UciString(String::new()))
         );
         assert_eq!(
             uci_command_response.option_block.numa_policy,
-            model::NumaPolicy::Auto
+            Some(model::NumaPolicy::Auto)
         );
         assert_eq!(
             uci_command_response.option_block.threads,
-            Spin {
+            Some(Spin {
                 default: 1,
                 min: 1,
                 max: 1024,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.hash,
-            Spin {
+            Some(Spin {
                 default: 16,
                 min: 1,
                 max: 33554432,
-            }
+            })
         );
-        assert_eq!(uci_command_response.option_block.clear_hash, ());
+        assert_eq!(uci_command_response.option_block.clear_hash, Some(()));
         assert_eq!(
             uci_command_response.option_block.ponder,
-            model::Check(false)
+            Some(model::Check(false))
         );
         assert_eq!(
             uci_command_response.option_block.multi_pv,
-            Spin {
+            Some(Spin {
                 default: 1,
                 min: 1,
                 max: 256,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.skill_level,
-            Spin {
+            Some(Spin {
                 default: 20,
                 min: 0,
                 max: 20,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.move_overhead,
-            Spin {
+            Some(Spin {
                 default: 10,
                 min: 0,
                 max: 5000,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.nodestime,
-            Spin {
+            Some(Spin {
                 default: 0,
                 min: 0,
                 max: 10000,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.uci_chess_960,
-            model::Check(false)
+            Some(model::Check(false))
         );
         assert_eq!(
             uci_command_response.option_block.uci_limit_strength,
-            model::Check(false)
+            Some(model::Check(false))
         );
         assert_eq!(
             uci_command_response.option_block.uci_elo,
-            Spin {
+            Some(Spin {
                 default: 1320,
                 min: 1320,
                 max: 3190,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.uci_show_wdl,
-            model::Check(false)
+            Some(model::Check(false))
         );
         assert_eq!(
             uci_command_response.option_block.syzygy_path,
-            model::UciString(String::new())
+            Some(model::UciString(String::new()))
         );
         assert_eq!(
             uci_command_response.option_block.syzygy_probe_depth,
-            Spin {
+            Some(Spin {
                 default: 1,
                 min: 1,
                 max: 100,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.syzygy_50_move_rule,
-            model::Check(true)
+            Some(model::Check(true))
         );
         assert_eq!(
             uci_command_response.option_block.syzygy_probe_limit,
-            Spin {
+            Some(Spin {
                 default: 7,
                 min: 0,
                 max: 7,
-            }
+            })
         );
         assert_eq!(
             uci_command_response.option_block.eval_file,
-            model::UciString("nn-1c0000000000.nnue".to_string())
+            Some(model::UciString("nn-1c0000000000.nnue".to_string()))
         );
         assert_eq!(
             uci_command_response.option_block.eval_file_small,
-            model::UciString("nn-37f18f62d772.nnue".to_string())
+            Some(model::UciString("nn-37f18f62d772.nnue".to_string()))
         );
     }
 }

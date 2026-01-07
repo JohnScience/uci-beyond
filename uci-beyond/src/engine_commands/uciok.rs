@@ -28,23 +28,31 @@ impl AsyncReadable for UciOkCommand {
     where
         R: StreamingLineReader,
     {
-        let f = |line: &str| {
-            if line.trim() == "uciok" {
-                LineHandlerOutcome::Read(UciOkCommand)
-            } else {
-                LineHandlerOutcome::Error(command::parsing::Error::CustomError(
-                    UciOkCommandParsingError(line.to_string()),
-                ))
-            }
-        };
+        // Skip empty lines before uciok
+        loop {
+            let f = |line: &str| {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    // Skip empty lines
+                    LineHandlerOutcome::Read(None)
+                } else if trimmed == "uciok" {
+                    LineHandlerOutcome::Read(Some(UciOkCommand))
+                } else {
+                    LineHandlerOutcome::Error(command::parsing::Error::CustomError(
+                        UciOkCommandParsingError(line.to_string()),
+                    ))
+                }
+            };
 
-        match handle_next_line(reader, f).await? {
-            Some(LineHandlerOutcome::Read(cmd)) => Ok(Some(Ok(cmd))),
-            Some(LineHandlerOutcome::Error(e)) => Ok(Some(Err(e))),
-            Some(LineHandlerOutcome::Peeked) => {
-                return command::parsing::Error::UnexpectedPeekOutput.wrap();
+            match handle_next_line(reader, f).await? {
+                Some(LineHandlerOutcome::Read(Some(cmd))) => return Ok(Some(Ok(cmd))),
+                Some(LineHandlerOutcome::Read(None)) => continue, // Skip empty line and try next
+                Some(LineHandlerOutcome::Error(e)) => return Ok(Some(Err(e))),
+                Some(LineHandlerOutcome::Peeked) => {
+                    return command::parsing::Error::UnexpectedPeekOutput.wrap();
+                }
+                None => return Ok(None),
             }
-            None => Ok(None),
         }
     }
 }
