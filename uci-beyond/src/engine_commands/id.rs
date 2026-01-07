@@ -7,7 +7,7 @@ use variants_data_struct::VariantsDataStruct;
 
 use crate::command;
 use crate::command::Command;
-use crate::util::{AsyncReadable, StreamingLineReader, handle_next_line};
+use crate::util::{AsyncReadable, LineHandlerOutcome, StreamingLineReader, handle_next_line};
 
 // TODO: reimplement parsing using better abstractions
 
@@ -74,7 +74,7 @@ impl FromStr for IdCommand {
     type Err = command::parsing::Error<IdCommandParsingError>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = IdCommand::parse_name(s)?;
+        let s = IdCommand::parse_cmd_name(s)?;
 
         let (field, value) = s
             .split_once(' ')
@@ -100,14 +100,21 @@ impl AsyncReadable for IdCommand {
     where
         R: StreamingLineReader,
     {
-        let f = |line: &str| -> Result<IdCommand, <IdCommand as FromStr>::Err> {
-            line.parse::<IdCommand>()
+        let f = |line: &str| -> LineHandlerOutcome<IdCommand, <IdCommand as FromStr>::Err> {
+            match line.parse::<IdCommand>() {
+                Ok(cmd) => LineHandlerOutcome::Read(cmd),
+                Err(e) => LineHandlerOutcome::Error(e),
+            }
         };
 
-        let result: Option<Result<IdCommand, <IdCommand as FromStr>::Err>> =
-            handle_next_line(reader, f).await?;
-
-        Ok(result)
+        match handle_next_line(reader, f).await? {
+            Some(LineHandlerOutcome::Read(cmd)) => Ok(Some(Ok(cmd))),
+            Some(LineHandlerOutcome::Error(e)) => Ok(Some(Err(e))),
+            Some(LineHandlerOutcome::Peeked) => {
+                return command::parsing::Error::UnexpectedPeekOutput.wrap();
+            }
+            None => Ok(None),
+        }
     }
 }
 

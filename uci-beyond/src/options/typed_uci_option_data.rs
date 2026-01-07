@@ -20,7 +20,7 @@ pub enum KnownUciOptionDataParsingError {
 }
 
 /// The data for the respective [`UciOptionType`] <https://backscattering.de/chess/uci/#engine-option-type>
-#[derive(Kinded)]
+#[derive(Kinded, Debug, PartialEq, Eq, Clone)]
 #[kinded(
     kind = UciOptionType,
     display="snake_case",
@@ -38,6 +38,28 @@ pub enum TypedUciOptionData {
     Check(model::Check),
     /// a combo box that can have different predefined strings as a value
     Combo(Vec<model::UciString>),
+}
+
+impl std::fmt::Display for TypedUciOptionData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spin(spin) => write!(f, "{spin}"),
+            Self::String(uci_string) => write!(f, "default {uci_string}"),
+            Self::Button => write!(f, ""),
+            Self::Check(check) => write!(f, "default {check}"),
+            Self::Combo(options) => {
+                write!(
+                    f,
+                    "default {}",
+                    options.first().unwrap_or(&model::UciString(String::new()))
+                )?;
+                for option in options {
+                    write!(f, " var {option}")?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 impl FromStr for UciOptionType {

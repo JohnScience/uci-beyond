@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     command,
-    util::{AsyncReadable, StreamingLineReader, handle_next_line},
+    util::{AsyncReadable, LineHandlerOutcome, StreamingLineReader, handle_next_line},
 };
 
 #[derive(Debug)]
@@ -30,17 +30,22 @@ impl AsyncReadable for UciOkCommand {
     {
         let f = |line: &str| {
             if line.trim() == "uciok" {
-                Ok(UciOkCommand)
+                LineHandlerOutcome::Read(UciOkCommand)
             } else {
-                Err(command::parsing::Error::CustomError(
+                LineHandlerOutcome::Error(command::parsing::Error::CustomError(
                     UciOkCommandParsingError(line.to_string()),
                 ))
             }
         };
 
-        let res = handle_next_line(reader, f).await?;
-
-        Ok(res)
+        match handle_next_line(reader, f).await? {
+            Some(LineHandlerOutcome::Read(cmd)) => Ok(Some(Ok(cmd))),
+            Some(LineHandlerOutcome::Error(e)) => Ok(Some(Err(e))),
+            Some(LineHandlerOutcome::Peeked) => {
+                return command::parsing::Error::UnexpectedPeekOutput.wrap();
+            }
+            None => Ok(None),
+        }
     }
 }
 

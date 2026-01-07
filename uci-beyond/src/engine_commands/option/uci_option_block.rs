@@ -4,7 +4,7 @@ use crate::{
     command,
     engine_commands::{self, OptionCommand},
     options::UciOption,
-    util::{AsyncReadable, StreamingLineReader},
+    util::{AsyncReadable, LineHandlerOutcome, StreamingLineReader, handle_next_line},
 };
 
 // UciOptionBlock is defined there because the UciOption enum is in the options module
@@ -14,6 +14,8 @@ pub use crate::options::{UciOptionBlock, UciOptionBlockBuilder};
 pub enum OptionBlockParsingError {
     CommandErrorParsingError(engine_commands::OptionCommandParsingError),
     IncompleteBlock,
+    EmptyLineWasNotFoundUntilEndOfStream,
+    RepeatedOption,
 }
 
 impl OptionBlockParsingError {
@@ -34,20 +36,36 @@ impl AsyncReadable for UciOptionBlock {
         let mut b = UciOptionBlockBuilder::default();
 
         loop {
-            let cmd = OptionCommand::read_from(reader).await?;
-
-            let Some(cmd) = cmd else {
-                if i == 0 {
-                    // No OptionCommands were read; return None
-                    return Ok(None);
+            let opt = handle_next_line(reader, |line: &str| {
+                if line.trim().is_empty() {
+                    return LineHandlerOutcome::Peeked;
                 }
-                // EOF reached before completing the block
-                return OptionBlockParsingError::IncompleteBlock.wrap();
+                match line.parse::<OptionCommand>() {
+                    Ok(cmd) => LineHandlerOutcome::Read(cmd),
+                    Err(e) => LineHandlerOutcome::Error(e),
+                }
+            })
+            .await?;
+
+            let Some(outcome) = opt else {
+                return OptionBlockParsingError::EmptyLineWasNotFoundUntilEndOfStream.wrap();
             };
 
-            let cmd = match cmd {
-                Ok(cmd) => cmd,
-                Err(e) => {
+            let cmd: OptionCommand = match outcome {
+                LineHandlerOutcome::Peeked => {
+                    if i == 0 {
+                        // No OptionCommands were read; return None
+                        return Ok(None);
+                    } else {
+                        // End of OptionBlock
+                        match b.try_into() {
+                            Ok(id_block) => return Ok(Some(Ok(id_block))),
+                            Err(_b) => return OptionBlockParsingError::IncompleteBlock.wrap(),
+                        };
+                    }
+                }
+                LineHandlerOutcome::Read(cmd) => cmd,
+                LineHandlerOutcome::Error(e) => {
                     return e.map_custom(OptionBlockParsingError::from).wrap();
                 }
             };
@@ -55,31 +73,138 @@ impl AsyncReadable for UciOptionBlock {
             let uci_option: UciOption = cmd.0;
 
             match uci_option {
-                UciOption::ClearHash => b.clear_hash = Some(()),
-                UciOption::DebugLogFile { default } => b.debug_log_file = Some(default),
-                UciOption::EvalFile { default } => b.eval_file = Some(default),
-                UciOption::EvalFileSmall { default } => b.eval_file_small = Some(default),
-                UciOption::Hash(spin) => b.hash = Some(spin),
-                UciOption::MoveOverhead(spin) => b.move_overhead = Some(spin),
-                UciOption::MultiPV(spin) => b.multi_pv = Some(spin),
-                UciOption::Nodestime(spin) => b.nodestime = Some(spin),
-                UciOption::NumaPolicy { default } => b.numa_policy = Some(default),
-                UciOption::Ponder { default } => b.ponder = Some(default),
-                UciOption::SkillLevel(spin) => b.skill_level = Some(spin),
-                UciOption::Syzygy50MoveRule { default } => b.syzygy_50_move_rule = Some(default),
-                UciOption::SyzygyPath { default } => b.syzygy_path = Some(default),
-                UciOption::SyzygyProbeDepth(spin) => b.syzygy_probe_depth = Some(spin),
-                UciOption::SyzygyProbeLimit(spin) => b.syzygy_probe_limit = Some(spin),
-                UciOption::Threads(spin) => b.threads = Some(spin),
-                UciOption::UCIChess960 { default } => b.uci_chess_960 = Some(default),
-                UciOption::UCIElo(spin) => b.uci_elo = Some(spin),
-                UciOption::UCILimitStrength { default } => b.uci_limit_strength = Some(default),
-                UciOption::UCIShowWDL { default } => b.uci_show_wdl = Some(default),
-            };
+                UciOption::ClearHash => {
+                    if b.clear_hash.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.clear_hash = Some(());
+                }
+                UciOption::DebugLogFile { default } => {
+                    if b.debug_log_file.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.debug_log_file = Some(default);
+                }
+                UciOption::EvalFile { default } => {
+                    if b.eval_file.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.eval_file = Some(default);
+                }
+                UciOption::EvalFileSmall { default } => {
+                    if b.eval_file_small.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.eval_file_small = Some(default);
+                }
+                UciOption::Hash(spin) => {
+                    if b.hash.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.hash = Some(spin);
+                }
+                UciOption::MoveOverhead(spin) => {
+                    if b.move_overhead.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.move_overhead = Some(spin);
+                }
+                UciOption::MultiPV(spin) => {
+                    if b.multi_pv.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.multi_pv = Some(spin);
+                }
+                UciOption::Nodestime(spin) => {
+                    if b.nodestime.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.nodestime = Some(spin);
+                }
+                UciOption::NumaPolicy { default } => {
+                    if b.numa_policy.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.numa_policy = Some(default);
+                }
+                UciOption::Ponder { default } => {
+                    if b.ponder.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.ponder = Some(default);
+                }
+                UciOption::SkillLevel(spin) => {
+                    if b.skill_level.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.skill_level = Some(spin);
+                }
+                UciOption::Syzygy50MoveRule { default } => {
+                    if b.syzygy_50_move_rule.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.syzygy_50_move_rule = Some(default);
+                }
+                UciOption::SyzygyPath { default } => {
+                    if b.syzygy_path.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.syzygy_path = Some(default);
+                }
+                UciOption::SyzygyProbeDepth(spin) => {
+                    if b.syzygy_probe_depth.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.syzygy_probe_depth = Some(spin);
+                }
+                UciOption::SyzygyProbeLimit(spin) => {
+                    if b.syzygy_probe_limit.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.syzygy_probe_limit = Some(spin);
+                }
+                UciOption::Threads(spin) => {
+                    if b.threads.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.threads = Some(spin);
+                }
+                UciOption::UCIChess960 { default } => {
+                    if b.uci_chess_960.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.uci_chess_960 = Some(default);
+                }
+                UciOption::UCIElo(spin) => {
+                    if b.uci_elo.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.uci_elo = Some(spin);
+                }
+                UciOption::UCILimitStrength { default } => {
+                    if b.uci_limit_strength.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.uci_limit_strength = Some(default);
+                }
+                UciOption::UCIShowWDL { default } => {
+                    if b.uci_show_wdl.is_some() {
+                        return OptionBlockParsingError::RepeatedOption.wrap();
+                    };
+                    b.uci_show_wdl = Some(default);
+                }
+                UciOption::Custom { name, typed_data } => {
+                    use std::collections::hash_map::Entry::{Occupied, Vacant};
 
-            b = match b.try_into() {
-                Ok(id_block) => return Ok(Some(Ok(id_block))),
-                Err(e) => e,
+                    match b.custom.entry(name) {
+                        Occupied(_) => {
+                            return OptionBlockParsingError::RepeatedOption.wrap();
+                        }
+                        Vacant(e) => {
+                            e.insert(typed_data);
+                        }
+                    }
+                }
             };
 
             i += 1;
@@ -120,7 +245,9 @@ mod tests {
            option name Syzygy50MoveRule type check default true\n\
            option name SyzygyProbeLimit type spin default 7 min 0 max 7\n\
            option name EvalFile type string default nn-1c0000000000.nnue\n\
-           option name EvalFileSmall type string default nn-37f18f62d772.nnue\n";
+           option name EvalFileSmall type string default nn-37f18f62d772.nnue\n\
+           \n\
+           \n";
 
         let mut reader = tokio::io::BufReader::new(input.as_bytes());
         let uci_option_block = UciOptionBlock::read_from(&mut reader)

@@ -6,7 +6,7 @@ use crate::{
         IdBlock, IdBlockParsingError, OptionBlockParsingError, UciOkCommand,
         UciOkCommandParsingError, UciOptionBlock,
     },
-    util::{AsyncReadable, handle_next_line},
+    util::{AsyncReadable, LineHandlerOutcome, handle_next_line},
 };
 
 #[derive(Debug)]
@@ -61,19 +61,24 @@ impl AsyncReadable for UciCommandResponse {
 
         match handle_next_line(
             reader,
-            |line: &str| -> Result<(), UciCommandResponseParsingError> {
+            |line: &str| -> LineHandlerOutcome<(), UciCommandResponseParsingError> {
                 if line.trim().is_empty() {
-                    Ok(())
+                    LineHandlerOutcome::Read(())
                 } else {
-                    Err(UciCommandResponseParsingError::ExpectedEmptyLineAfterIdBlock)
+                    LineHandlerOutcome::Error(
+                        UciCommandResponseParsingError::ExpectedEmptyLineAfterIdBlock,
+                    )
                 }
             },
         )
         .await?
         {
-            Some(Ok(())) => (),
-            Some(Err(e)) => {
+            Some(LineHandlerOutcome::Read(())) => (),
+            Some(LineHandlerOutcome::Error(e)) => {
                 return e.wrap();
+            }
+            Some(LineHandlerOutcome::Peeked) => {
+                return command::parsing::Error::UnexpectedPeekOutput.wrap();
             }
             None => {
                 return UciCommandResponseParsingError::IncompleteResponse.wrap();
@@ -143,6 +148,7 @@ option name Syzygy50MoveRule type check default true\n\
 option name SyzygyProbeLimit type spin default 7 min 0 max 7\n\
 option name EvalFile type string default nn-1c0000000000.nnue\n\
 option name EvalFileSmall type string default nn-37f18f62d772.nnue\n\
+\n\
 uciok\n";
 
         let mut reader = tokio::io::BufReader::new(input.as_bytes());

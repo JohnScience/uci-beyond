@@ -14,6 +14,7 @@ pub use uci_string::UciString;
 
 /// [Forsyth-Edwards Notation (FEN)](https://www.chess.com/terms/fen-chess)
 /// string representing a chess position.
+#[derive(Clone)]
 pub struct FenString(pub String);
 
 /// Either a starting position or a [`FenString`].
@@ -39,6 +40,7 @@ impl Display for Position {
 ///
 /// * <https://en.wikipedia.org/wiki/Algebraic_notation_(chess)#Long_algebraic_notation:~:text=A%20form%20of%20long%20algebraic,)%2C%20e7e8q%20(promotion)>
 /// * <https://en.wikipedia.org/wiki/Universal_Chess_Interface#Design:~:text=long%20algebraic%20notation>
+#[derive(Clone)]
 pub struct MoveString(pub String);
 
 impl Display for MoveString {

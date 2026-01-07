@@ -2,20 +2,23 @@
 //!
 //! [UCI]: https://official-stockfish.github.io/docs/stockfish-wiki/UCI-&-Commands.html
 
-use std::{fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt::Display};
 
-use kinded::Kinded;
 use optional_struct::optional_struct;
-use strum::EnumIter;
 use variants_data_struct::VariantsDataStruct;
 
 use crate::model;
 
 mod spin;
 pub mod typed_uci_option_data;
+mod uci_option_basic_info;
+mod uci_option_kind;
 
 pub use spin::Spin;
 pub use typed_uci_option_data::{TypedUciOptionData, UciOptionType, UnknownUciOptionType};
+pub use uci_option_basic_info::UciOptionBasicInfo;
+pub use uci_option_kind::UciOptionKind;
+
 #[derive(Debug)]
 pub struct UciOptionDataTypeMismatchError {
     pub option_kind: UciOptionKind,
@@ -30,7 +33,14 @@ pub enum UciOptionFromPartsError {
 
 /// The enumeration of known UCI options.
 
-#[derive(VariantsDataStruct, Kinded, PartialEq, Eq, Debug, Clone)]
+#[derive(
+    VariantsDataStruct,
+    // Kinded,
+    PartialEq,
+    Eq,
+    Debug,
+    Clone,
+)]
 #[variants_data_struct(
     name=UciOptionBlock,
     attrs(
@@ -41,7 +51,7 @@ pub enum UciOptionFromPartsError {
         #[derive(Debug, PartialEq, Eq, Clone)]
     )
 )]
-#[kinded(kind = UciOptionKind, opt_outs=[from_str_impl], derive(EnumIter))]
+// #[kinded(kind = UciOptionKind, opt_outs=[from_str_impl], derive(EnumIter))]
 pub enum UciOption {
     /// The number of CPU threads used for searching a position. For best performance, set this equal to the number of CPU cores available.
     #[variants_data_struct_field(field_ty_override = Spin)]
@@ -119,92 +129,72 @@ pub enum UciOption {
     /// Write all communication to and from the engine into a text file.
     #[variants_data_struct_field(field_ty_override = model::UciString)]
     DebugLogFile { default: model::UciString },
+    #[variants_data_struct_field(
+        field_ty_override = HashMap<String, TypedUciOptionData>,
+        field_attrs(#[optional_skip_wrap])
+    )]
+    Custom {
+        name: String,
+        typed_data: TypedUciOptionData,
+    },
 }
 
-#[derive(Debug)]
-pub struct UnknownUciOptionKind(pub String);
-
-impl UciOptionKind {
-    pub fn name(self) -> &'static str {
-        match self {
-            UciOptionKind::Threads => "Threads",
-            UciOptionKind::Hash => "Hash",
-            UciOptionKind::MultiPV => "MultiPV",
-            UciOptionKind::NumaPolicy => "NumaPolicy",
-            UciOptionKind::ClearHash => "Clear Hash",
-            UciOptionKind::Ponder => "Ponder",
-            UciOptionKind::EvalFile => "EvalFile",
-            UciOptionKind::EvalFileSmall => "EvalFileSmall",
-            UciOptionKind::UCIChess960 => "UCI_Chess960",
-            UciOptionKind::UCIShowWDL => "UCI_ShowWDL",
-            UciOptionKind::UCILimitStrength => "UCI_LimitStrength",
-            UciOptionKind::UCIElo => "UCI_Elo",
-            UciOptionKind::SkillLevel => "Skill Level",
-            UciOptionKind::SyzygyPath => "SyzygyPath",
-            UciOptionKind::SyzygyProbeDepth => "SyzygyProbeDepth",
-            UciOptionKind::Syzygy50MoveRule => "Syzygy50MoveRule",
-            UciOptionKind::SyzygyProbeLimit => "SyzygyProbeLimit",
-            UciOptionKind::MoveOverhead => "Move Overhead",
-            UciOptionKind::Nodestime => "nodestime",
-            UciOptionKind::DebugLogFile => "Debug Log File",
-        }
-    }
-
-    pub fn r#type(self) -> UciOptionType {
-        match self {
-            UciOptionKind::Threads => UciOptionType::Spin,
-            UciOptionKind::Hash => UciOptionType::Spin,
-            UciOptionKind::MultiPV => UciOptionType::Spin,
-            UciOptionKind::NumaPolicy => UciOptionType::String,
-            UciOptionKind::ClearHash => UciOptionType::Button,
-            UciOptionKind::Ponder => UciOptionType::Check,
-            UciOptionKind::EvalFile => UciOptionType::String,
-            UciOptionKind::EvalFileSmall => UciOptionType::String,
-            UciOptionKind::UCIChess960 => UciOptionType::Check,
-            UciOptionKind::UCIShowWDL => UciOptionType::Check,
-            UciOptionKind::UCILimitStrength => UciOptionType::Check,
-            UciOptionKind::UCIElo => UciOptionType::Spin,
-            UciOptionKind::SkillLevel => UciOptionType::Spin,
-            UciOptionKind::SyzygyPath => UciOptionType::String,
-            UciOptionKind::SyzygyProbeDepth => UciOptionType::Spin,
-            UciOptionKind::Syzygy50MoveRule => UciOptionType::Check,
-            UciOptionKind::SyzygyProbeLimit => UciOptionType::Spin,
-            UciOptionKind::MoveOverhead => UciOptionType::Spin,
-            UciOptionKind::Nodestime => UciOptionType::Spin,
-            UciOptionKind::DebugLogFile => UciOptionType::String,
-        }
-    }
-}
-
-impl FromStr for UciOptionKind {
-    type Err = UnknownUciOptionKind;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use strum::IntoEnumIterator as _;
-
-        for kind in UciOptionKind::iter() {
-            if kind.name() == s {
-                return Ok(kind);
-            }
-        }
-
-        Err(UnknownUciOptionKind(s.to_string()))
-    }
+pub enum UciOptionNameInfo {
+    Standard(UciOptionKind),
+    Custom { name: String },
 }
 
 impl UciOption {
-    pub fn name(&self) -> &'static str {
-        self.kind().name()
+    pub fn basic_info(&self) -> UciOptionBasicInfo<&str> {
+        let kind = match self {
+            UciOption::Custom { name, typed_data } => {
+                return UciOptionBasicInfo::Custom {
+                    name: &name,
+                    r#type: typed_data.r#type(),
+                };
+            }
+            UciOption::Threads { .. } => UciOptionKind::Threads,
+            UciOption::Hash { .. } => UciOptionKind::Hash,
+            UciOption::MultiPV { .. } => UciOptionKind::MultiPV,
+            UciOption::NumaPolicy { .. } => UciOptionKind::NumaPolicy,
+            UciOption::ClearHash => UciOptionKind::ClearHash,
+            UciOption::Ponder { .. } => UciOptionKind::Ponder,
+            UciOption::EvalFile { .. } => UciOptionKind::EvalFile,
+            UciOption::EvalFileSmall { .. } => UciOptionKind::EvalFileSmall,
+            UciOption::UCIChess960 { .. } => UciOptionKind::UCIChess960,
+            UciOption::UCIShowWDL { .. } => UciOptionKind::UCIShowWDL,
+            UciOption::UCILimitStrength { .. } => UciOptionKind::UCILimitStrength,
+            UciOption::UCIElo { .. } => UciOptionKind::UCIElo,
+            UciOption::SkillLevel { .. } => UciOptionKind::SkillLevel,
+            UciOption::SyzygyPath { .. } => UciOptionKind::SyzygyPath,
+            UciOption::SyzygyProbeDepth { .. } => UciOptionKind::SyzygyProbeDepth,
+            UciOption::Syzygy50MoveRule { .. } => UciOptionKind::Syzygy50MoveRule,
+            UciOption::SyzygyProbeLimit { .. } => UciOptionKind::SyzygyProbeLimit,
+            UciOption::MoveOverhead { .. } => UciOptionKind::MoveOverhead,
+            UciOption::Nodestime { .. } => UciOptionKind::Nodestime,
+            UciOption::DebugLogFile { .. } => UciOptionKind::DebugLogFile,
+        };
+        UciOptionBasicInfo::Standard(kind)
+    }
+
+    pub fn name(&self) -> &str {
+        self.basic_info().name()
     }
 
     pub fn r#type(&self) -> UciOptionType {
-        self.kind().r#type()
+        self.basic_info().r#type()
     }
 
     pub fn from_parts(
-        kind: UciOptionKind,
+        name_info: UciOptionNameInfo,
         typed_data: TypedUciOptionData,
     ) -> Result<Self, UciOptionFromPartsError> {
+        let kind = match name_info {
+            UciOptionNameInfo::Custom { name } => {
+                return Ok(UciOption::Custom { name, typed_data });
+            }
+            UciOptionNameInfo::Standard(kind) => kind,
+        };
         if kind.r#type() != typed_data.r#type() {
             return Err(UciOptionFromPartsError::UciOptionDataTypeMismatchError(
                 UciOptionDataTypeMismatchError {
@@ -388,6 +378,12 @@ impl Display for UciOption {
             Self::MoveOverhead(spin) => write!(f, "{spin}"),
             Self::Nodestime(spin) => write!(f, "{spin}"),
             Self::DebugLogFile { default } => write!(f, "default {default}"),
+            Self::Custom {
+                name: _,
+                typed_data,
+            } => {
+                write!(f, "{}", typed_data)
+            }
         }
     }
 }

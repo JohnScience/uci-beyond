@@ -2,7 +2,7 @@ pub trait Command {
     type ParsingError;
 
     const NAME: &'static str;
-    fn parse_name(s: &str) -> Result<&str, parsing::Error<Self::ParsingError>> {
+    fn parse_cmd_name(s: &str) -> Result<&str, parsing::Error<Self::ParsingError>> {
         if s.is_empty() {
             return Err(parsing::Error::UnexpectedEof);
         }
@@ -30,6 +30,9 @@ pub mod parsing {
         UnexpectedCommand(String),
         #[error("Unexpected format")]
         UnexpectedFormat,
+        /// This error happens when [`crate::util::handle_next_line`]
+        #[error("Unexpected peek output")]
+        UnexpectedPeekOutput,
         #[error("Custom parsing error: {0}")]
         CustomError(E),
     }
@@ -44,6 +47,7 @@ pub mod parsing {
                 Error::UnexpectedEndOfTokens => Error::UnexpectedEndOfTokens,
                 Error::UnexpectedCommand(cmd) => Error::UnexpectedCommand(cmd),
                 Error::UnexpectedFormat => Error::UnexpectedFormat,
+                Error::UnexpectedPeekOutput => Error::UnexpectedPeekOutput,
                 Error::CustomError(e) => Error::CustomError(f(e)),
             }
         }

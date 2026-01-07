@@ -64,8 +64,40 @@ pub struct NnueNetworkArchitecture {
 /// i.e. the last three numbers in [`NnueNetworkArchitecture`].
 pub struct NnueNetowrkHeadDimensions(pub [u32; 3]);
 
+/// The
+///
+/// ```text
+/// info string Using 1 thread
+/// ```
+///
+/// in
+///
+/// ```text
+/// go depth 5
+/// info string Available processors: 0-7
+/// info string Using 1 thread
+/// info string NNUE evaluation using nn-1c0000000000.nnue (133MiB, (22528, 3072, 15, 32, 1))
+/// info string NNUE evaluation using nn-37f18f62d772.nnue (6MiB, (22528, 128, 15, 32, 1))
+/// info depth 1 seldepth 2 multipv 1 score cp 17 nodes 20 nps 6666 hashfull 0 tbhits 0 time 3 pv e2e4
+/// info depth 2 seldepth 3 multipv 1 score cp 34 nodes 45 nps 11250 hashfull 0 tbhits 0 time 4 pv e2e4
+/// info depth 3 seldepth 4 multipv 1 score cp 42 nodes 72 nps 14400 hashfull 0 tbhits 0 time 5 pv e2e4
+/// info depth 4 seldepth 7 multipv 1 score cp 39 nodes 512 nps 85333 hashfull 0 tbhits 0 time 6 pv g1f3 d7d5 d2d4
+/// info depth 5 seldepth 7 multipv 1 score cp 58 nodes 609 nps 87000 hashfull 0 tbhits 0 time 7 pv e2e4
+/// bestmove e2e4 ponder d7d6
+/// ```
 pub struct UsingThreadsInfoCommand {
     pub threads: u32,
+}
+
+impl Display for UsingThreadsInfoCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "info string Using {} thread{}",
+            self.threads,
+            if self.threads == 1 { "" } else { "s" }
+        )
+    }
 }
 
 /// ```text
@@ -92,7 +124,7 @@ impl FromStr for AvailableProcessorsInfoCommand {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use crate::command::Command as _;
 
-        let s = InfoCommand::parse_name(s)?;
+        let s = InfoCommand::parse_cmd_name(s)?;
         let string_token = s
             .split_whitespace()
             .next()
@@ -177,7 +209,7 @@ impl FromStr for NnueEvaluationInfoCommand {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use crate::command::Command as _;
 
-        let s = InfoCommand::parse_name(s)?;
+        let s = InfoCommand::parse_cmd_name(s)?;
         let string_token = s
             .split_whitespace()
             .next()

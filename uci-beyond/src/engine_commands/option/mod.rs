@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     command, options,
-    util::{AsyncReadable, StreamingLineReader, handle_next_line},
+    util::{AsyncReadable, LineHandlerOutcome, StreamingLineReader, handle_next_line},
 };
 
 mod type_clause;
@@ -13,13 +13,18 @@ pub use type_clause::{TypeClause, TypeClauseParsingError};
 pub use uci_option_block::{OptionBlockParsingError, UciOptionBlock};
 
 /// <https://backscattering.de/chess/uci/#engine-option>
+///
+/// E.g.
+///
+/// ```text
+/// option name Hash type spin default 1 min 1 max 128
+/// ```
 pub struct OptionCommand(pub options::UciOption);
 
 #[derive(Debug)]
 pub enum OptionCommandParsingError {
     /// The `name` token was expected. Encountered something else.
     NameTokenExpected(String),
-    UnknownOptionKind(options::UnknownUciOptionKind),
     TypeClauseParsingError(TypeClauseParsingError),
     UnexpectedUciType {
         option_kind: options::UciOptionKind,
@@ -49,10 +54,12 @@ impl OptionCommand {
         Ok(s.trim_start_matches("name").trim_start())
     }
 
-    fn parse_option_kind(
+    fn parse_name_info(
         mut s: &str,
-    ) -> Result<(options::UciOptionKind, &str), command::parsing::Error<OptionCommandParsingError>>
-    {
+    ) -> Result<
+        (options::UciOptionNameInfo, &str),
+        command::parsing::Error<OptionCommandParsingError>,
+    > {
         debug_assert_eq!(s, s.trim_start());
         let orig = s;
 
@@ -82,19 +89,30 @@ impl OptionCommand {
         let option_kind: options::UciOptionKind = match option_kind.parse() {
             Ok(kind) => kind,
             Err(e) => {
-                return Err(command::parsing::Error::CustomError(
-                    OptionCommandParsingError::UnknownOptionKind(e),
+                return Ok((
+                    options::UciOptionNameInfo::Custom {
+                        name: option_kind.to_string(),
+                    },
+                    s,
                 ));
             }
         };
 
-        Ok((option_kind, s))
+        Ok((options::UciOptionNameInfo::Standard(option_kind), s))
     }
 
     fn validate_uci_type(
-        option_kind: options::UciOptionKind,
+        name_info: &options::UciOptionNameInfo,
         uci_type: options::UciOptionType,
     ) -> Result<(), command::parsing::Error<OptionCommandParsingError>> {
+        let option_kind = match name_info {
+            options::UciOptionNameInfo::Standard(kind) => *kind,
+            options::UciOptionNameInfo::Custom { .. } => {
+                // Can't validate custom options
+                return Ok(());
+            }
+        };
+
         let expected_uci_type = option_kind.r#type();
 
         if expected_uci_type != uci_type {
@@ -143,19 +161,22 @@ impl FromStr for OptionCommand {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use crate::command::Command as _;
 
-        let s = OptionCommand::parse_name(s)?;
+        let s = OptionCommand::parse_cmd_name(s)?;
 
         // TODO: consider defining a "name clause"
         let s = OptionCommand::parse_name_token(s)?;
-        let (option_kind, s) = OptionCommand::parse_option_kind(s)?;
+        let (name_info, s) = match OptionCommand::parse_name_info(s) {
+            Ok(res) => res,
+            Err(e) => return Err(e),
+        };
 
         let (TypeClause { uci_type }, s) = TypeClause::parse_clause(s)?;
 
-        OptionCommand::validate_uci_type(option_kind, uci_type)?;
+        OptionCommand::validate_uci_type(&name_info, uci_type)?;
 
         let (typed_data, s) = options::TypedUciOptionData::parse_for_type(uci_type, s)?;
 
-        let uci_option = options::UciOption::from_parts(option_kind, typed_data)?;
+        let uci_option = options::UciOption::from_parts(name_info, typed_data)?;
 
         if !s.is_empty() {
             return Err(command::parsing::Error::CustomError(
@@ -175,14 +196,21 @@ impl AsyncReadable for OptionCommand {
     where
         R: StreamingLineReader,
     {
-        let f = |line: &str| -> Result<OptionCommand, <OptionCommand as FromStr>::Err> {
-            line.parse::<OptionCommand>()
+        let f = |line: &str| -> LineHandlerOutcome<OptionCommand, <OptionCommand as FromStr>::Err> {
+            match line.parse::<OptionCommand>() {
+                Ok(cmd) => LineHandlerOutcome::Read(cmd),
+                Err(e) => LineHandlerOutcome::Error(e),
+            }
         };
 
-        let res: Option<Result<OptionCommand, <OptionCommand as FromStr>::Err>> =
-            handle_next_line(reader, f).await?;
-
-        Ok(res)
+        match handle_next_line(reader, f).await? {
+            Some(LineHandlerOutcome::Read(cmd)) => Ok(Some(Ok(cmd))),
+            Some(LineHandlerOutcome::Error(e)) => Ok(Some(Err(e))),
+            Some(LineHandlerOutcome::Peeked) => {
+                return command::parsing::Error::UnexpectedPeekOutput.wrap();
+            }
+            None => Ok(None),
+        }
     }
 }
 

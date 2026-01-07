@@ -12,10 +12,7 @@ impl UciString {
     pub fn parse(s: &str) -> Result<(Self, &str), command::parsing::Error<Infallible>> {
         debug_assert_eq!(s, s.trim_start());
 
-        let value = s
-            .split_whitespace()
-            .next()
-            .ok_or(command::parsing::Error::UnexpectedEndOfTokens)?;
+        let value = s.split_whitespace().next().unwrap_or("<empty>");
 
         let s = s.trim_start_matches(value).trim_start();
 

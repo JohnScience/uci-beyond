@@ -30,13 +30,19 @@ pub trait StreamingLineReader: Unpin + Send {
     fn consume_line_manually(&mut self, line_len: usize);
 }
 
+pub enum LineHandlerOutcome<O, E> {
+    Read(O),
+    Error(E),
+    Peeked,
+}
+
 pub async fn handle_next_line<R, F, O, E>(
     reader: &mut R,
     mut f: F,
-) -> Result<Option<Result<O, E>>, R::Error>
+) -> Result<Option<LineHandlerOutcome<O, E>>, R::Error>
 where
     R: StreamingLineReader,
-    F: FnMut(&str) -> Result<O, E> + Send + Unpin,
+    F: FnMut(&str) -> LineHandlerOutcome<O, E> + Send + Unpin,
     O: Send,
 {
     use core::future::poll_fn;

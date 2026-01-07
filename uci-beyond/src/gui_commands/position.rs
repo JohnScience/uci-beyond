@@ -11,6 +11,16 @@ pub struct PositionCommand {
     pub moves: Vec<model::MoveString>,
 }
 
+impl PositionCommand {
+    /// Create a `PositionCommand` from a FEN string.
+    pub fn from_fen(fen: model::FenString) -> Self {
+        Self {
+            startpos: model::Position::Fen(fen),
+            moves: Vec::new(),
+        }
+    }
+}
+
 impl Display for PositionCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "position {}", self.startpos)?;
